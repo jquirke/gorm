@@ -363,7 +363,7 @@ func ParseWithSpecialTableName(dest interface{}, cacheStore *sync.Map, namer Nam
 	}()
 
 	for _, cbName := range callbackTypes {
-		if methodValue := modelValue.MethodByName(string(cbName)); methodValue.IsValid() {
+		if methodValue := callBackToMethodValue(modelValue, cbName); methodValue.IsValid() {
 			switch methodValue.Type().String() {
 			case "func(*gorm.DB) error":
 				expectedPkgPath := path.Dir(reflect.TypeOf(schema).Elem().PkgPath())
@@ -387,6 +387,39 @@ func ParseWithSpecialTableName(dest interface{}, cacheStore *sync.Map, namer Nam
 	}
 
 	return schema, schema.err
+}
+
+// This unrolling is needed to show to the compiler the exact set of methods
+// that can be used on the modelType.
+// Prior to go1.22 any use of MethodByName would cause the linker to
+// abandon dead code elimination for the entire binary.
+// As of go1.22 the compiler supports one special case of a string constant
+// being passed to MethodByName. For enterprise customers or those building
+// large binaries, this gives a significant reduction in binary size.
+// https://github.com/golang/go/issues/62257
+func callBackToMethodValue(modelType reflect.Value, cbType callbackType) reflect.Value {
+	switch cbType {
+	case callbackTypeBeforeCreate:
+		return modelType.MethodByName(string(callbackTypeBeforeCreate))
+	case callbackTypeAfterCreate:
+		return modelType.MethodByName(string(callbackTypeAfterCreate))
+	case callbackTypeBeforeUpdate:
+		return modelType.MethodByName(string(callbackTypeBeforeUpdate))
+	case callbackTypeAfterUpdate:
+		return modelType.MethodByName(string(callbackTypeAfterUpdate))
+	case callbackTypeBeforeSave:
+		return modelType.MethodByName(string(callbackTypeBeforeSave))
+	case callbackTypeAfterSave:
+		return modelType.MethodByName(string(callbackTypeAfterSave))
+	case callbackTypeBeforeDelete:
+		return modelType.MethodByName(string(callbackTypeBeforeDelete))
+	case callbackTypeAfterDelete:
+		return modelType.MethodByName(string(callbackTypeAfterDelete))
+	case callbackTypeAfterFind:
+		return modelType.MethodByName(string(callbackTypeAfterFind))
+	default:
+		return reflect.Value{}
+	}
 }
 
 func getOrParse(dest interface{}, cacheStore *sync.Map, namer Namer) (*Schema, error) {
